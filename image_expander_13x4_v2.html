@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image Expander 13:4</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f7f8fa;
+      color: #333;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+    }
+
+    h1 {
+      font-weight: 600;
+      color: #222;
+      margin-bottom: 1rem;
+    }
+
+    #fileInput {
+      display: none;
+    }
+
+    .upload-label {
+      background: #4f8ef7;
+      color: white;
+      padding: 0.7rem 1.2rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    .upload-label:hover {
+      background: #3d7de0;
+    }
+
+    #dropZone {
+      border: 2px dashed #ccc;
+      background: white;
+      padding: 2rem;
+      text-align: center;
+      margin-top: 1.5rem;
+      border-radius: 10px;
+      width: 100%;
+      max-width: 500px;
+      transition: background 0.3s, border-color 0.3s;
+    }
+    #dropZone.dragover {
+      border-color: #4f8ef7;
+      background: #eef4ff;
+    }
+
+    img.preview {
+      max-width: 100%;
+      margin-top: 1.5rem;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+  </style>
+</head>
+<body>
+  <h1>Image Expander (13:4 Ratio)</h1>
+  <label for="fileInput" class="upload-label">Choose Image</label>
+  <input type="file" id="fileInput" accept="image/*">
+  <div id="dropZone">Drop an image here or click "Choose Image"</div>
+  <canvas id="canvas" style="display:none;"></canvas>
+  <img id="preview" class="preview" alt="Processed Image Preview">
+
+  <script>
+    function getMedianColor(pixels) {
+      const rs = [], gs = [], bs = [];
+      for (let i = 0; i < pixels.length; i += 4) {
+        rs.push(pixels[i]);
+        gs.push(pixels[i+1]);
+        bs.push(pixels[i+2]);
+      }
+      rs.sort((a,b)=>a-b);
+      gs.sort((a,b)=>a-b);
+      bs.sort((a,b)=>a-b);
+      const mid = Math.floor(rs.length/2);
+      return [rs[mid], gs[mid], bs[mid]];
+    }
+
+    function processImage(file) {
+      const img = new Image();
+      img.onload = function() {
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        ctx.drawImage(img, 0, 0);
+
+        const edgeSampleSize = 10;
+        const topPixels = ctx.getImageData(0, 0, img.width, edgeSampleSize).data;
+        const bottomPixels = ctx.getImageData(0, img.height - edgeSampleSize, img.width, edgeSampleSize).data;
+        const leftPixels = ctx.getImageData(0, 0, edgeSampleSize, img.height).data;
+        const rightPixels = ctx.getImageData(img.width - edgeSampleSize, 0, edgeSampleSize, img.height).data;
+
+        const topColor = getMedianColor(topPixels);
+        const bottomColor = getMedianColor(bottomPixels);
+        const leftColor = getMedianColor(leftPixels);
+        const rightColor = getMedianColor(rightPixels);
+
+        const avgColor = [
+          Math.round((topColor[0] + bottomColor[0] + leftColor[0] + rightColor[0]) / 4),
+          Math.round((topColor[1] + bottomColor[1] + leftColor[1] + rightColor[1]) / 4),
+          Math.round((topColor[2] + bottomColor[2] + leftColor[2] + rightColor[2]) / 4)
+        ];
+
+        const targetRatio = 13/4;
+        let newWidth = img.width;
+        let newHeight = img.height;
+        if (img.width / img.height < targetRatio) {
+          newWidth = img.height * targetRatio;
+        } else {
+          newHeight = img.width / targetRatio;
+        }
+
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+
+        ctx.fillStyle = `rgb(${avgColor[0]}, ${avgColor[1]}, ${avgColor[2]})`;
+        ctx.fillRect(0, 0, newWidth, newHeight);
+
+        const x = (newWidth - img.width) / 2;
+        const y = (newHeight - img.height) / 2;
+        ctx.drawImage(img, x, y);
+
+        const dataURL = canvas.toDataURL();
+        document.getElementById('preview').src = dataURL;
+
+        const link = document.createElement('a');
+        link.download = 'expanded-image.png';
+        link.href = dataURL;
+        link.click();
+      };
+      img.src = URL.createObjectURL(file);
+    }
+
+    document.getElementById('fileInput').addEventListener('change', e => {
+      if (e.target.files[0]) processImage(e.target.files[0]);
+    });
+
+    const dropZone = document.getElementById('dropZone');
+    dropZone.addEventListener('dragover', e => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
+    dropZone.addEventListener('dragleave', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+    });
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      if (e.dataTransfer.files[0]) processImage(e.dataTransfer.files[0]);
+    });
+  </script>
+</body>
+</html>
